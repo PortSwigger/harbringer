@@ -1,5 +1,5 @@
 # HARBringer
-True HAR importer for Portswigger BUrpsuite
+True HAR importer for Portswigger Burpsuite
 
 HARbringer is a Burp Suite extension that allows you to import HTTP Archive (HAR) files directly into Burp's site map. This enables you to analyze previously captured traffic without having to recapture it through Burp's proxy.
 
