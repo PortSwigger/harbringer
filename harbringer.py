@@ -1,9 +1,11 @@
 from burp import IBurpExtender, ITab, IHttpRequestResponse, IHttpService
-from javax.swing import JPanel, JButton, JScrollPane, JTable, JTextField, JLabel, JOptionPane, JFileChooser
+from javax.swing import JPanel, JButton, JScrollPane, JTable, JTextField, JLabel, JOptionPane, JFileChooser, ListSelectionModel
 from javax.swing.table import AbstractTableModel
 from java.awt import BorderLayout, FlowLayout, Dimension
 from java.net import URL
 from java.io import File
+import java
+import javax
 import json
 import traceback
 import base64
@@ -74,7 +76,9 @@ class HttpService(IHttpService):
 class HarTableModel(AbstractTableModel):
     def __init__(self, entries):
         self.entries = entries
-        self.columnNames = ["Method", "URL", "Status", "Length", "MIME Type"]
+        self.columnNames = ["#", "Method", "URL", "Status", "Length", "MIME Type"]
+#        self.columnClasses = [int, str, str, int, str, int, int]  # Make sure the first column is int type
+
 
     def getColumnCount(self):
         return len(self.columnNames)
@@ -84,25 +88,41 @@ class HarTableModel(AbstractTableModel):
 
     def getColumnName(self, column):
         return self.columnNames[column]
+    
+    def getColumnClass(self, column):
+        if column == 0:  # Request Number column
+            return java.lang.Integer
+        elif column == 4:  # Length column
+            return java.lang.Integer
+        else:
+            return java.lang.String
+
 
     def getValueAt(self, row, column):
         entry = self.entries[row]
         request = entry.get('request', {})
         response = entry.get('response', {})
 
-        if column == 0:
-            return request.get('method', '')
+        if column == 0: # Request Number
+            return row + 1
         elif column == 1:
-            return request.get('url', '')
+            return request.get('method', '')
         elif column == 2:
-            return response.get('status', 0)
+            return request.get('url', '')
         elif column == 3:
+            return response.get('status', 0)
+        elif column == 4:
             content = response.get('content', {})
             return content.get('size', 0)
-        elif column == 4:
+        elif column == 5:
             content = response.get('content', {})
             return content.get('mimeType', '')
         return ""
+
+    def clearData(self):
+        self.entries = []
+        self.fireTableDataChanged()  # This notifies the table that data has changed
+
 
 # Main extension class
 class BurpExtender(IBurpExtender, ITab):
@@ -131,12 +151,15 @@ class BurpExtender(IBurpExtender, ITab):
         self.filePathField.setEditable(False)
 
         browseButton = JButton("Browse", actionPerformed=self.browse_file)
-        loadButton = JButton("Load HAR", actionPerformed=self.load_har)
+        self.loadButton = JButton("Load HAR", actionPerformed=self.load_har)
+        self.clearButton = JButton("Clear", actionPerformed=self.clear_table)
 
+        
         topPanel.add(JLabel("HAR File:"))
         topPanel.add(self.filePathField)
         topPanel.add(browseButton)
-        topPanel.add(loadButton)
+        topPanel.add(self.loadButton)
+        topPanel.add(self.clearButton)
 
         self.panel.add(topPanel, BorderLayout.NORTH)
 
@@ -146,21 +169,50 @@ class BurpExtender(IBurpExtender, ITab):
         self.table = JTable(self.tableModel)
         self.table.setAutoCreateRowSorter(True)
 
+        # Single selection mode
+        self.table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION)
+
+
         scrollPane = JScrollPane(self.table)
         scrollPane.setPreferredSize(Dimension(800, 400))
 
         self.panel.add(scrollPane, BorderLayout.CENTER)
 
+        # set column widths
+        self.table.getColumnModel().getColumn(0).setPreferredWidth(30)  # Request Number
+        self.table.getColumnModel().getColumn(1).setPreferredWidth(50)  # Method
+        self.table.getColumnModel().getColumn(2).setPreferredWidth(800)  # URL
+        self.table.getColumnModel().getColumn(3).setPreferredWidth(50)  # Status
+        self.table.getColumnModel().getColumn(4).setPreferredWidth(50)  # Length
+        self.table.getColumnModel().getColumn(5).setPreferredWidth(150)  # MIME Type
+
+
+        # Set maximum widths for non-URL columns
+        self.table.getColumnModel().getColumn(0).setMaxWidth(30)  # Request Number
+        self.table.getColumnModel().getColumn(1).setMaxWidth(50)  # Method
+        self.table.getColumnModel().getColumn(3).setMaxWidth(50)  # Status
+        self.table.getColumnModel().getColumn(4).setMaxWidth(50)  # Length
+        self.table.getColumnModel().getColumn(5).setMaxWidth(150)  # MIME Type
+
+
+
+
         # Bottom panel for actions
         buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT))
 
-        sendToHistoryButton = JButton("Send to Site Map", actionPerformed=self.send_selected_to_http_history)
-        importAllButton = JButton("Import All to Site Map", actionPerformed=self.import_all_to_sitemap)
+        self.sendToHistoryButton = JButton("Send to Site Map", actionPerformed=self.send_selected_to_http_history)
+        self.importAllButton = JButton("Import All to Site Map", actionPerformed=self.import_all_to_sitemap)
 
-        buttonPanel.add(sendToHistoryButton)
-        buttonPanel.add(importAllButton)
+        buttonPanel.add(self.sendToHistoryButton)
+        buttonPanel.add(self.importAllButton)
 
         self.panel.add(buttonPanel, BorderLayout.SOUTH)
+
+        # button state
+        self.sendToHistoryButton.setEnabled(False)
+        self.importAllButton.setEnabled(False)
+        self.clearButton.setEnabled(False)
+        self.loadButton.setEnabled(False)
 
     def getTabCaption(self):
         return "HARbringer"
@@ -178,6 +230,7 @@ class BurpExtender(IBurpExtender, ITab):
         if result == JFileChooser.APPROVE_OPTION:
             selectedFile = fileChooser.getSelectedFile()
             self.filePathField.setText(selectedFile.getAbsolutePath())
+            self.loadButton.setEnabled(True)
 
     def load_har(self, event):
         filePath = self.filePathField.getText()
@@ -200,6 +253,29 @@ class BurpExtender(IBurpExtender, ITab):
             self.entries = entries
             self.tableModel = HarTableModel(self.entries)
             self.table.setModel(self.tableModel)
+
+            # set column widths
+            self.table.getColumnModel().getColumn(0).setPreferredWidth(30)  # Request Number
+            self.table.getColumnModel().getColumn(1).setPreferredWidth(50)  # Method
+            self.table.getColumnModel().getColumn(2).setPreferredWidth(800)  # URL
+            self.table.getColumnModel().getColumn(3).setPreferredWidth(50)  # Status
+            self.table.getColumnModel().getColumn(4).setPreferredWidth(50)  # Length
+            self.table.getColumnModel().getColumn(5).setPreferredWidth(150)  # MIME Type
+
+
+            # Set maximum widths for non-URL columns
+            self.table.getColumnModel().getColumn(0).setMaxWidth(30)  # Request Number
+            self.table.getColumnModel().getColumn(1).setMaxWidth(50)  # Method
+            self.table.getColumnModel().getColumn(3).setMaxWidth(50)  # Status
+            self.table.getColumnModel().getColumn(4).setMaxWidth(50)  # Length
+            self.table.getColumnModel().getColumn(5).setMaxWidth(150)  # MIME Type
+
+            # enable buttons
+            self.sendToHistoryButton.setEnabled(True)
+            self.importAllButton.setEnabled(True)
+            self.clearButton.setEnabled(True)
+
+
 
             self.log("[HARbringer] Imported %d entries successfully" % len(entries))
             JOptionPane.showMessageDialog(None, "Imported %d entries successfully." % len(entries), "Success", JOptionPane.INFORMATION_MESSAGE)
@@ -314,6 +390,15 @@ class BurpExtender(IBurpExtender, ITab):
             traceback.print_exc(file=self._stdout)
             JOptionPane.showMessageDialog(None, "Error: " + str(e), "Error", JOptionPane.ERROR_MESSAGE)
 
+    def clear_table(self, event):
+        self.tableModel.clearData()
+        self.entries = []
+        # Disable buttons after clearing
+        self.sendToHistoryButton.setEnabled(False)
+        self.importAllButton.setEnabled(False)
+        self.clearButton.setEnabled(False)
+
+
     def import_all_to_sitemap(self, event):
         if not self.entries:
             JOptionPane.showMessageDialog(None, "No entries to import.", "Error", JOptionPane.ERROR_MESSAGE)
@@ -391,10 +476,24 @@ class BurpExtender(IBurpExtender, ITab):
                         resp_header_lines.append("%s: %s" % (name, value))
 
                     raw_response = response_line + "\r\n" + "\r\n".join(resp_header_lines) + "\r\n\r\n"
-                    if resp_body:
-                        raw_response += resp_body
+# Get the encoding from the Content-Type header if available
+                    content_type = resp_content.get('mimeType', '')
+                    encoding = 'utf-8'  # Default encoding
+                    if content_type and 'charset=' in content_type:
+                        try:
+                            # Extract encoding from content type
+                            encoding = content_type.split('charset=')[1].split(';')[0].strip()
+                        except IndexError:
+                            pass  # No charset specified, use default
 
-                    # Convert to bytes
+                    # Handle the response body encoding
+                    if isinstance(resp_body, bytes):
+                        try:
+                            resp_body = resp_body.decode(encoding)
+                        except UnicodeDecodeError:
+                            # Fallback to latin-1 which can handle any byte value
+                            resp_body = resp_body.decode('latin-1')
+                    raw_response += resp_body
                     request_bytes = self._helpers.stringToBytes(raw_request)
                     response_bytes = self._helpers.stringToBytes(raw_response)
 
