@@ -2,7 +2,9 @@
 True HAR importer for Portswigger Burpsuite
 
 ## Why another Burp Suite HAR Importer?
-Burpsuite's BApp Store extension [HAR Importer](https://github.com/portswigger/har-importer) (created by Fortalice Solutions, LLC) **does not actually import** your HAR file's original HTTP request and responses.  Instead, each entry in the HAR file is [requested again](https://github.com/PortSwigger/har-importer/blob/60211490d941fdd2ed77192caa432ede2777f00d/src/main/java/com/fortalice/gui.java#L103) upon import.
+Burpsuite's BApp Store extension [HAR Importer](https://github.com/portswigger/har-importer) (created by Fortalice Solutions, LLC) **does not actually import** your HAR file's original HTTP request and responses.  Instead, each entry in the HAR file is [requested again](https://github.com/PortSwigger/har-importer/blob/60211490d941fdd2ed77192caa432ede2777f00d/src/main/java/com/fortalice/gui.java#L103) upon import.  This means all requests imported **are not the original requests/responses**.
+
+Due to this shortcoming Abira Security created Harbringer.  Harbringer **always imports the original requests/responses** from your HAR file.
 
 
 ## Description
