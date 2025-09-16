@@ -7,7 +7,7 @@ SerialVersion: 1
 MinPlatformVersion: 2
 ProOnly: False
 Author: abirasecurity
-ShortDescription: HARBringer is a Burp Suite extension that enables import of HTTP Archive (HAR) files directly into Burp's site map, preserving all original HTTP requests and responses.
+ShortDescription: Import HTTP Archive (HAR) files directly into the Site Map.
 EntryPoint: harbringer.py
 BuildCommand: 
 SupportedProducts: Pro, Community
